@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculadora Convertible WM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+:root{--az:#1F3864;--az2:#2E75B6;--soft:#F2F6FC;--ink:#1d2433;--mut:#5b6474;--line:#e3e7ee;--ve:#548235;--ro:#C00000;--bg:#F7F8FA}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.45}
+header{background:var(--az);color:#fff;padding:18px 20px}header h1{margin:0 0 4px;font-size:22px}header p{margin:0;color:#dfe7f3;font-size:13.5px}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;grid-template-columns:330px 1fr;gap:16px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid var(--line);padding:14px 16px}
+h2{font-size:15px;margin:0 0 10px;color:var(--az);text-transform:uppercase;letter-spacing:.04em}
+label{display:grid;grid-template-columns:1fr 92px;align-items:center;gap:8px;margin:7px 0;font-size:13.5px;color:var(--mut)}
+input{width:100%;padding:5px 6px;border:1px solid var(--line);font:inherit;font-size:14px;text-align:right;color:var(--ink)}
+button{margin-top:8px;padding:7px 10px;border:1px solid var(--az);background:#fff;color:var(--az);cursor:pointer;font:inherit;font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:#fff;border:1px solid var(--line);border-left:4px solid var(--az);padding:9px 11px}.kpi span{display:block;font-size:12px;color:var(--mut)}.kpi b{font-size:20px;color:var(--az);font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:13.5px}td{padding:5px 4px;border-bottom:1px solid var(--line)}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.nota{font-size:12.5px;color:var(--mut);margin-top:8px}.plot{height:300px}
+</style></head><body>
+<header><h1>Calculadora: bono convertible + call spread (Waste Management, WM)</h1>
+<p>Convertible = bono recto + opción call sobre la acción. Cambia los parámetros y todo se recalcula. Valores iniciales: LSEG Workspace al 21-oct-2026 (caso base del reporte).</p></header>
+<main>
+<section class="card"><h2>Parámetros</h2>
+<label>Precio de la acción S (USD)<input id="S" type="number" step="0.01" value="229.58"></label>
+<label>Prima de conversión (%)<input id="primaConv" type="number" step="1" value="25"></label>
+<label>Prima del warrant (%)<input id="primaWarr" type="number" step="1" value="60"></label>
+<label>Plazo T (años)<input id="T" type="number" step="1" min="1" value="6"></label>
+<label>Tasa libre de riesgo r (%)<input id="r" type="number" step="0.01" value="4.9568"></label>
+<label>YTM del bono recto WM (%)<input id="y" type="number" step="0.01" value="5.649"></label>
+<label>Dividend yield q (%)<input id="q" type="number" step="0.01" value="1.63"></label>
+<label>Vol. opción de conversión (%)<input id="s" type="number" step="0.1" value="22.7453"></label>
+<label>Vol. del warrant (%)<input id="sw" type="number" step="0.1" value="21.04"></label>
+<label>Monto de la emisión (USD mm)<input id="monto" type="number" step="10" value="750"></label>
+<label>Pasos del árbol T-F<input id="N" type="number" step="12" min="12" max="600" value="360"></label>
+<button id="reset">Volver al caso base</button>
+<p class="nota">r: promedio de Treasuries a 5 y 7 años (US5YT=RR 4.9182%, US7YT=RR 4.9954%). Vol. de conversión: implícita del call WM ene-2029 strike 290 (OPW). Vol. del warrant: histórica 90 días. Fuente: LSEG, 21-oct-2026.</p>
+</section>
+<section>
+<div class="kpis">
+<div class="kpi"><span>Cupón a la par (árbol T-F)</span><b id="k1"></b></div>
+<div class="kpi"><span>Ahorro vs. bono recto</span><b id="k2"></b></div>
+<div class="kpi"><span>Costo neto call spread</span><b id="k3"></b></div>
+<div class="kpi"><span>Precio de conversión</span><b id="k4"></b></div>
+</div>
+<div class="grid2">
+<div class="card"><h2>Bono recto + opción (por bono de USD 1,000)</h2><table id="t1"></table>
+<p class="nota">Black-Scholes-Merton con dividendo. El cupón "bono + call" sigue el método del caso; el árbol Tsiveriotis-Fernandes agrega conversión anticipada y riesgo de crédito (efectivo a la YTM de WM, acciones a la tasa libre de riesgo).</p></div>
+<div class="card"><h2>Call spread (note hedge largo + warrants cortos)</h2><table id="t2"></table>
+<p class="nota">Griegas de la posición neta para WM. No hay free lunch: subir la prima efectiva de 25% a la prima del warrant cuesta el call spread.</p></div>
+</div>
+<div class="grid2" style="margin-top:12px">
+<div class="card"><h2>Dilución al vencimiento</h2><div id="p1" class="plot"></div></div>
+<div class="card"><h2>Cupón a la par según volatilidad</h2><div id="p2" class="plot"></div></div>
+</div>
+</section></main>
+<script>
+// Motor de valuación (mismo método que WM_Proyecto_Final.Rmd)
+const N01 = x => { // CDF normal estándar (Abramowitz-Stegun 7.1.26 vía erf)
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x / 2);
+  return x >= 0 ? 0.5 * (1 + y) : 0.5 * (1 - y);
+};
+const n01 = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+
+function bsCall(S, K, r, s, T, q) {
+  const d1 = (Math.log(S / K) + (r - q + s * s / 2) * T) / (s * Math.sqrt(T)), d2 = d1 - s * Math.sqrt(T);
+  return {
+    precio: S * Math.exp(-q * T) * N01(d1) - K * Math.exp(-r * T) * N01(d2),
+    delta: Math.exp(-q * T) * N01(d1),
+    gamma: Math.exp(-q * T) * n01(d1) / (S * s * Math.sqrt(T)),
+    vega: S * Math.exp(-q * T) * n01(d1) * Math.sqrt(T) / 100
+  };
+}
+function valorBono(cup, y, T, F = 1000, m = 2) {
+  let v = 0; const n = Math.round(T * m);
+  for (let t = 1; t <= n; t++) v += (F * cup / m + (t === n ? F : 0)) / Math.pow(1 + y / m, t);
+  return v;
+}
+function biseccion(f, a, b, tol = 1e-10) {
+  let fa = f(a), fb = f(b);
+  if (fa * fb > 0) return NaN;
+  for (let i = 0; i < 200; i++) {
+    const c = (a + b) / 2, fc = f(c);
+    if (Math.abs(fc) < tol || (b - a) / 2 < tol) return c;
+    if (fa * fc < 0) { b = c; fb = fc; } else { a = c; fa = fc; }
+  }
+  return (a + b) / 2;
+}
+// Convertible completo: Tsiveriotis-Fernandes en árbol CRR
+function tfConvertible(cup, p) {
+  const { S, primaConv, s, q, N, T, r, y, F = 1000 } = p;
+  const nn = F / (S * (1 + primaConv)), dt = T / N;
+  const u = Math.exp(s * Math.sqrt(dt)), d = 1 / u, pr = (Math.exp((r - q) * dt) - d) / (u - d);
+  const rc = 2 * Math.log(1 + y / 2), dr = Math.exp(-r * dt), dk = Math.exp(-rc * dt);
+  const paso = N / (2 * T), cpn = F * cup / 2;
+  let V = new Float64Array(N + 1), B = new Float64Array(N + 1);
+  for (let j = 0; j <= N; j++) {
+    const conv = nn * S * Math.pow(u, N - j) * Math.pow(d, j);
+    V[j] = Math.max(conv, F + cpn); B[j] = conv >= F + cpn ? 0 : F + cpn;
+  }
+  for (let i = N - 1; i >= 0; i--) {
+    for (let j = 0; j <= i; j++) {
+      let Bc = dk * (pr * B[j] + (1 - pr) * B[j + 1]);
+      const Ec = dr * (pr * (V[j] - B[j]) + (1 - pr) * (V[j + 1] - B[j + 1]));
+      if (i > 0 && Math.abs(i % paso) < 1e-9) Bc += cpn;
+      const Vc = Bc + Ec, cv = nn * S * Math.pow(u, i - j) * Math.pow(d, j);
+      if (cv > Vc) { V[j] = cv; B[j] = 0; } else { V[j] = Vc; B[j] = Bc; }
+    }
+  }
+  return V[0];
+}
+function calcular(p) {
+  const K = p.S * (1 + p.primaConv), Kw = p.S * (1 + p.primaWarr), n = 1000 / K, accMM = p.monto / K;
+  const c = bsCall(p.S, K, p.r, p.s, p.T, p.q), w = bsCall(p.S, Kw, p.r, p.sw, p.T, p.q);
+  const opcionBono = c.precio * n;
+  const cuponBS = biseccion(cc => valorBono(cc, p.y, p.T) - (1000 - opcionBono), -0.05, 0.15);
+  const cuponTF = biseccion(cc => tfConvertible(cc, p) - 1000, -0.03, 0.15, 1e-8);
+  const hedge = c.precio * accMM, warr = w.precio * accMM, neto = hedge - warr;
+  return {
+    K, Kw, n, accMM, call: c.precio, warrant: w.precio, opcionBono, bonoRecto: 1000 - opcionBono, cuponBS, cuponTF,
+    hedge, warr, neto, netoPct: neto / p.monto,
+    delta: (c.delta - w.delta) * accMM, gamma: (c.gamma - w.gamma) * accMM, vega: (c.vega - w.vega) * accMM,
+    ahorroPb: (p.y - cuponTF) * 1e4
+  };
+}
+
+
+const ids=["S","primaConv","primaWarr","T","r","y","q","s","sw","monto","N"];
+const base={}; ids.forEach(i=>base[i]=document.getElementById(i).value);
+const f=(x,d=2)=>x.toLocaleString("es-MX",{minimumFractionDigits:d,maximumFractionDigits:d});
+const pc=(x,d=2)=>isNaN(x)?"sin solución":f(100*x,d)+"%";
+function leer(){const v=i=>parseFloat(document.getElementById(i).value);
+ let N=Math.max(12,Math.round(v("N")/(2*v("T")))*2*v("T"));
+ return {S:v("S"),primaConv:v("primaConv")/100,primaWarr:v("primaWarr")/100,T:v("T"),r:v("r")/100,y:v("y")/100,q:v("q")/100,s:v("s")/100,sw:v("sw")/100,monto:v("monto"),N:N};}
+function fila(a,b){return `<tr><td>${a}</td><td>${b}</td></tr>`}
+function render(){const p=leer(); const R=calcular(p);
+ document.getElementById("k1").textContent=pc(R.cuponTF);
+ document.getElementById("k2").textContent=isNaN(R.ahorroPb)?"–":f(R.ahorroPb,0)+" pb";
+ document.getElementById("k3").textContent="$"+f(R.neto,1)+" mm";
+ document.getElementById("k4").textContent="$"+f(R.K,2);
+ document.getElementById("t1").innerHTML=fila("Acciones por bono",f(R.n,4))+fila("Call por acción (BSM)","$"+f(R.call))+fila("Opción de conversión por bono","$"+f(R.opcionBono))+fila("Bono recto por bono","$"+f(R.bonoRecto))+fila("Cupón a la par: bono + call (caso)",pc(R.cuponBS,3))+fila("Cupón a la par: árbol T-F ("+p.N+" pasos)",pc(R.cuponTF,3))+fila("Bono recto WM (YTM)",pc(p.y,3));
+ document.getElementById("t2").innerHTML=fila("Strike note hedge","$"+f(R.K))+fila("Strike warrant","$"+f(R.Kw))+fila("Acciones cubiertas (mm)",f(R.accMM,3))+fila("Costo note hedge (USD mm)","$"+f(R.hedge,1))+fila("Ingreso por warrants (USD mm)","$"+f(R.warr,1))+fila("Costo neto (USD mm)","$"+f(R.neto,1))+fila("Costo neto / principal",pc(R.netoPct,1))+fila("Delta neta (mm acciones)",f(R.delta,4))+fila("Gamma neta (mm acc. por USD)",f(R.gamma,4))+fila("Vega neta (USD mm por punto)",f(R.vega,4));
+ const ST=[],a=[],b=[]; for(let s=0.6*p.S;s<=2.2*p.S;s+=p.S/100){ST.push(s);a.push(R.accMM*Math.max(s-R.K,0));b.push(R.accMM*Math.max(s-R.Kw,0));}
+ const lay={margin:{l:50,r:10,t:40,b:45},font:{size:12,color:"#1d2433"},paper_bgcolor:"#fff",plot_bgcolor:"#fff",legend:{orientation:"h",y:1.2,x:0,bgcolor:"rgba(0,0,0,0)"},xaxis:{gridcolor:"#e3e7ee"},yaxis:{gridcolor:"#e3e7ee"}};
+ Plotly.react("p1",[{x:ST,y:a,name:"Sin call spread",line:{color:"#C00000",width:2}},{x:ST,y:b,name:"Con call spread",line:{color:"#548235",width:2}}],
+  Object.assign({},lay,{xaxis:Object.assign({title:"Precio de WM al vencimiento (USD)"},lay.xaxis),yaxis:Object.assign({title:"USD mm entregados en acciones"},lay.yaxis)}),{displayModeBar:false,responsive:true});
+ const vs=[],cs=[]; for(let v=0.16;v<=0.32001;v+=0.02){vs.push(100*v);cs.push(100*calcular(Object.assign({},p,{s:v,N:120})).cuponTF);}
+ Plotly.react("p2",[{x:vs,y:cs,mode:"lines+markers",name:"Cupón a la par (T-F, 120 pasos)",line:{color:"#2E75B6",width:2}},{x:[vs[0],vs[vs.length-1]],y:[100*p.y,100*p.y],name:"Bono recto WM",line:{color:"#7F7F7F",dash:"dash"}}],
+  Object.assign({},lay,{xaxis:Object.assign({title:"Volatilidad de la opción de conversión (%)"},lay.xaxis),yaxis:Object.assign({title:"Cupón (%)"},lay.yaxis)}),{displayModeBar:false,responsive:true});
+}
+ids.forEach(i=>document.getElementById(i).addEventListener("change",render));
+document.getElementById("reset").addEventListener("click",()=>{ids.forEach(i=>document.getElementById(i).value=base[i]);render();});
+render();
+</script></body></html>
